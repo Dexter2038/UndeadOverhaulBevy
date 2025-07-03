@@ -1,0 +1,23 @@
+Custom Game License – Undead Overhaul
+
+Copyright © 2025 Michael Barkaloff
+
+This source code is provided solely for the purpose of transparency and community modding.
+
+Permissions:
+- You may read and inspect this code to understand how the game works.
+- You may create and distribute game modifications (mods) that use official modding interfaces, assets, or APIs.
+- You may fork this repository only to create or maintain mods for Undead Overhaul.
+
+Restrictions:
+- You may not reuse this codebase in any other game, engine, or project.
+- You may not redistribute modified versions of the base game or its source.
+- You may not extract or use this code to circumvent anti-cheat mechanisms or gameplay protections.
+- You may not use this code to build derivative or competing products.
+
+Notes:
+- Game assets such as sound, music, and proprietary content are not included in this repository and remain the exclusive property of the game author.
+- This license applies only to the code included in this repository.
+
+By using or modifying this code, you agree to follow these terms.
+Violations may result in legal action or loss of access to modding tools.
