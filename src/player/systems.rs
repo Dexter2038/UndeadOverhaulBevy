@@ -1,5 +1,5 @@
 use crate::{
-    StaticBody,
+    DrillPickup, DrillSensor,
     player::{
         bundle::{CameraBundle, PlayerBundle},
         components::{
@@ -10,7 +10,7 @@ use crate::{
 };
 use bevy::prelude::*;
 use bevy_aseprite_ultra::prelude::*;
-use bevy_rapier2d::prelude::*;
+use bevy_rapier2d::{prelude::*, rapier::prelude::CollisionEventFlags};
 
 fn sprite_flip_x(sprite: &mut Sprite, val: bool) {
     if val == sprite.flip_x {
@@ -63,6 +63,9 @@ pub fn player_input_system(
             if keyboard_input.just_pressed(KeyCode::Space) {
                 velocity.linvel.y = jump_force.0;
                 *state = PlayerState::Jumping;
+                animation.animation = Animation::tag("jump")
+                    .with_speed(1.0)
+                    .with_repeat(AnimationRepeat::Count(1));
             } else {
                 match direction_x {
                     -1.0 | 1.0 => {
@@ -83,7 +86,94 @@ pub fn player_input_system(
     }
 }
 
-pub fn handle_ground_collision_events(
+#[derive(Component, Default)]
+pub struct DrillTool;
+
+#[derive(Bundle, Default)]
+pub struct DrillToolBundle {
+    drill: DrillTool,
+    transform: Transform,
+    sprite: Sprite,
+    aseprite: AseAnimation,
+}
+
+pub fn pickup_drill(
+    mut collision_events: EventReader<CollisionEvent>,
+    mut commands: Commands,
+    player_query: Query<Entity, With<Player>>,
+    drill_query: Query<(Entity, &ChildOf), With<DrillSensor>>,
+    asset_server: Res<AssetServer>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+) {
+    for event in collision_events.read() {
+        match event {
+            CollisionEvent::Started(e1, e2, flags) => {
+                if !flags.contains(CollisionEventFlags::SENSOR) {
+                    continue;
+                }
+                let (player, drill) =
+                    if player_query.get(*e1).is_ok() && drill_query.get(*e2).is_ok() {
+                        (*e1, *e2)
+                    } else if player_query.get(*e2).is_ok() && drill_query.get(*e1).is_ok() {
+                        (*e2, *e1)
+                    } else {
+                        continue;
+                    };
+                if let Ok((_, child_of)) = drill_query.get(drill) {
+                    // Despawn the parent entity
+                    commands.entity(child_of.parent()).despawn();
+                }
+                println!("drill picked up");
+            }
+            CollisionEvent::Stopped(e1, e2, flags) => {
+                if !flags.contains(CollisionEventFlags::SENSOR) {
+                    continue;
+                }
+                let (player, drill) =
+                    if player_query.get(*e1).is_ok() && drill_query.get(*e2).is_ok() {
+                        (*e1, *e2)
+                    } else if player_query.get(*e2).is_ok() && drill_query.get(*e1).is_ok() {
+                        (*e2, *e1)
+                    } else {
+                        continue;
+                    };
+                println!("drill dropped");
+            }
+        }
+        /*if let CollisionEvent::Started(e1, e2, flags) = event {
+            if flags.contains(CollisionEventFlags::SENSOR) {
+                let (player, drill) =
+                    if player_query.get(*e1).is_ok() && drill_query.get(*e2).is_ok() {
+                        (*e1, *e2)
+                    } else if player_query.get(*e2).is_ok() && drill_query.get(*e1).is_ok() {
+                        (*e2, *e1)
+                    } else {
+                        continue;
+                    };
+
+                // Despawn the pickup
+                commands.entity(drill).despawn();
+
+                let texture = asset_server.load("Drill.aseprite");
+
+                // Spawn the tool drill in player's hands
+                commands.entity(player).with_children(|parent| {
+                    parent.spawn(DrillToolBundle {
+                        drill: DrillTool,
+                        transform: Transform::from_xyz(-0.1, 2.0, 0.0),
+                        sprite: Sprite::default(),
+                        aseprite: AseAnimation {
+                            aseprite: texture,
+                            animation: Animation::default().with_speed(0.0),
+                        },
+                    });
+                });
+            }
+        }*/
+    }
+}
+
+/*pub fn handle_ground_collision_events(
     mut collision_events: EventReader<CollisionEvent>,
     mut player_state: Query<&mut PlayerState, With<Player>>,
     ground_query: Query<(), With<StaticBody>>,
@@ -98,6 +188,28 @@ pub fn handle_ground_collision_events(
         for &(player_entity, other_entity, is_start) in &[(e1, e2, started), (e2, e1, started)] {
             if let Ok(mut state) = player_state.get_mut(player_entity) {
                 if ground_query.get(other_entity).is_ok() && is_start {
+                    *state = PlayerState::Idle;
+                }
+            }
+        }
+    }
+}*/
+
+pub fn handle_ground_contacts(
+    mut contact_events: EventReader<ContactForceEvent>,
+    mut player_query: Query<&mut PlayerState, With<Player>>,
+) {
+    for event in contact_events.read() {
+        for (other_entity, player_entity) in [
+            (event.collider1, event.collider2),
+            (event.collider2, event.collider1),
+        ] {
+            if let Ok(mut state) = player_query.get_mut(player_entity) {
+                // Check if collision came from below
+                let dir = event.max_force_direction.abs().normalize_or_zero();
+                let from_below = dir.dot(Vec2::Y) > 0.6; // adjust threshold if needed
+
+                if from_below {
                     *state = PlayerState::Idle;
                 }
             }
@@ -140,8 +252,9 @@ pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             friction: Friction::new(0.0),
             rigidbody: RigidBody::Dynamic,
             locked_axes: LockedAxes::ROTATION_LOCKED,
-            active_events: ActiveEvents::COLLISION_EVENTS,
+            active_events: ActiveEvents::CONTACT_FORCE_EVENTS,
         })
+        .insert(ActiveEvents::COLLISION_EVENTS)
         .with_child(CameraBundle {
             camera2d: Camera2d,
             transform: Transform::from_scale(Vec3::new(0.3, 0.3, 0.3)),
