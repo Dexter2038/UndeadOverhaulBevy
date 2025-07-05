@@ -37,14 +37,21 @@ pub fn player_input_system(
         ),
         With<Player>,
     >,
+    gamepads: Query<(Entity, &Gamepad)>,
 ) {
     for (mut animation, mut sprite, speed, jump_force, mut velocity, mut state) in &mut query {
+        let mut x = 0.0;
+        let mut jump = false;
+        for (_entity, gamepad) in &gamepads {
+            x = gamepad.get(GamepadAxis::LeftStickX).unwrap();
+            jump = gamepad.just_pressed(GamepadButton::South);
+        }
         // Horizontal movement
         let mut direction_x = 0.0;
-        if keyboard_input.pressed(KeyCode::KeyA) {
+        if keyboard_input.pressed(KeyCode::KeyA) || x < -0.1 {
             direction_x -= 1.0;
         }
-        if keyboard_input.pressed(KeyCode::KeyD) {
+        if keyboard_input.pressed(KeyCode::KeyD) || x > 0.1 {
             direction_x += 1.0;
         }
         velocity.linvel.x = direction_x * speed.0;
@@ -60,7 +67,7 @@ pub fn player_input_system(
         }
 
         if state.as_ref() == &PlayerState::Idle || state.as_ref() == &PlayerState::Running {
-            if keyboard_input.just_pressed(KeyCode::Space) {
+            if keyboard_input.just_pressed(KeyCode::Space) || jump {
                 velocity.linvel.y = jump_force.0;
                 *state = PlayerState::Jumping;
                 animation.animation = Animation::tag("jump")
